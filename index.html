@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agent QR Attendance</title>
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#007bff">
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    h2 { text-align: center; }
+    #reader { width: 100%; max-width: 400px; margin: 0 auto; }
+    #status { margin-top: 20px; text-align: center; font-weight: bold; }
+  </style>
+</head>
+<body>
+
+  <h2>Agent QR Attendance</h2>
+  <div id="reader"></div>
+  <div id="status">Waiting for scan...</div>
+
+  <script>
+    const SHEET_URL = "https://script.google.com/macros/s/AKfycbzxIw4N1eMDOvvyX_NqgBxW1NrzwSo-bvz6xn9Fw2nhmZPiXreP0RfZU9HsTK0Ezk0SlQ/exec"; // Replace with your deployed Apps Script URL
+
+    function sendToSheet(agentId, name, lat, lng) {
+      fetch(SHEET_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "agentAttendance",  // Make sure you have this action in your Apps Script
+          agentId,
+          name,
+          lat,
+          lng,
+          location: "Mindanao",       // default location, optional
+          status: "active"
+        })
+      })
+      .then(res => res.json())
+      .then(resp => {
+        document.getElementById("status").innerText = "✅ Attendance saved!";
+        console.log("Saved:", resp);
+      })
+      .catch(err => {
+        document.getElementById("status").innerText = "❌ Failed to save attendance!";
+        console.error(err);
+      });
+    }
+
+    function startScanner() {
+      const html5QrCode = new Html5Qrcode("reader");
+
+      html5QrCode.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: 250 },
+        qrCodeMessage => {
+          console.log("QR Code Scanned:", qrCodeMessage);
+
+          // Expect QR format: AgentID|Name
+          const parts = qrCodeMessage.split("|");
+          const agentId = parts[0] || "";
+          const name = parts[1] || "";
+
+          // Get GPS location
+          navigator.geolocation.getCurrentPosition(pos => {
+            sendToSheet(agentId, name, pos.coords.latitude, pos.coords.longitude);
+          }, err => {
+            console.warn("Location not available, sending without lat/lng");
+            sendToSheet(agentId, name, null, null);
+          });
+
+          document.getElementById("status").innerText = `Scanned: ${name} (${agentId})`;
+        },
+        errorMessage => {
+          // ignore scan errors
+        }
+      ).catch(err => console.error(err));
+    }
+
+    startScanner();
+  </script>
+
+</body>
+</html>
